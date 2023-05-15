@@ -76,7 +76,7 @@ for tag in tags:
     if "winners" in tag.text.lower() and "expense" not in tag.text.lower():
         # Filter all winners but not winners expenses
         href = tag.get("href")
-        year = href.split("/")[1].strip("odisha").strip("orissa")
+        year = href.split("/")[1].lower().strip("odisha").strip("orissa")
         
         winner_url = f"{base_url}/{href}"
 
