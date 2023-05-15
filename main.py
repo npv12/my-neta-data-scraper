@@ -5,29 +5,21 @@ from openpyxl import Workbook
 
 base_url = "https://myneta.info"
 
-def generate_tables(table, year, is_winner=True):
+def generate_tables(table, year, ws, first_column, is_winner=True):
     """
     Generate tables based on the data given
     """
-    wb = Workbook()
-    ws = wb.active
-    first_column = ["Sno", "Candidates", "Constituency", "Party", "Criminal case", "Education", "Total Assets", "Liabilities"]
-    ws.append(first_column)
     
     rows = table.find_all("tr")
     headings = table.find_all("th")
     
-    is_correct_table: bool = False
     is_first_run: bool = True
     is_by_election = False
 
-    for heading in headings:
-        if "Candidate" in heading.text.strip():
-            is_correct_table = True
-            break
-
-    if not is_correct_table:
-        return 
+    heading_text = [heading.text.strip() for heading in headings]
+    for col in first_column:
+        if col not in heading_text:
+            return None
        
     for row in rows:
         cols = row.find_all("td")
@@ -49,8 +41,8 @@ def generate_tables(table, year, is_winner=True):
         file_name = file_name + "By_Election_"
 
     file_name = file_name + year
-    print("Done saving the table with name: ", file_name)
-    wb.save(file_name + ".xlsx")
+    print("Done creating the table with name: ", file_name)
+    return file_name
 
         
 
@@ -70,6 +62,7 @@ tags = a_tags + h_tags + p_tags
 for tag in tags:
     # Filter all winners but not winners expenses
     if "winners" in tag.text.lower() and "expense" not in tag.text.lower():
+        continue
         href = tag.get("href")
         year = href.split("/")[1].strip("odisha").strip("orissa")
         
@@ -82,4 +75,53 @@ for tag in tags:
         # Find all tables
         tables = winner_soup.find_all("table")
         for table in tables:
-            generate_tables(table, year)
+            wb = Workbook()
+            ws = wb.active
+            first_column = ["Sno", "Candidates", "Constituency", "Party", "Criminal case", "Education", "Total Assets", "Liabilities"]
+            ws.append(first_column)
+            file_name = generate_tables(table, year, ws, first_column)
+            wb.save(file_name + ".xlsx")
+            wb.close()
+
+    elif "all candidates" in tag.text.lower():
+        href = tag.get("href")
+        year = href.split("/")[1].strip("odisha").strip("orissa")
+
+        candidate_url = f"{base_url}/{href}"
+
+        candidate_response = requests.get(candidate_url)
+        assert candidate_response.status_code == 200
+        candidate_soup = BeautifulSoup(candidate_response.content, "html.parser")
+
+        h3_tags = candidate_soup.find_all("h3")
+        for h3_tag in h3_tags:
+            if "list of constituencies" in h3_tag.text.lower():
+                table = h3_tag.find_next("table")
+                rows = table.find_all("tr")
+                wb = Workbook()
+                ws = wb.active
+                first_column = ["Candidate","Party","Criminal Cases","Education","Age","Total Assets","Liabilities","Constituency"]
+                ws.append(first_column)
+                for row in rows:
+                    cols = row.find_all("td")
+                    for col in cols:
+                        a_tag = col.find_next("a")
+
+                        if a_tag is None:
+                            continue
+
+                        constituency_name = a_tag.text.strip()
+                        print("Constituency Name: ", constituency_name)
+                        break
+                        href = a_tag.get("href")
+                        constituency_url = f"{candidate_url}/{href}"
+                        constituency_response = requests.get(constituency_url)
+                        assert constituency_response.status_code == 200
+                        print("Constituency URL: ", constituency_url)
+                        
+                        constituency_soup = BeautifulSoup(constituency_response.content, "html.parser")
+                        tables = constituency_soup.find_all("table")
+                        for table in tables:
+                            file_name = generate_tables(table, year, ws, first_column, is_winner=False)
+                wb.save("All Candidates_" + year + ".xlsx")
+                wb.close()
