@@ -25,9 +25,12 @@ def generate_tables(table, year, ws, first_column, is_winner=True, extra_cols = 
     is_first_run: bool = True
     is_by_election = False
 
-    heading_text = [heading.text.strip() for heading in headings]
-    for col in first_column[:-1*len(extra_cols)]:
+    heading_text = [heading.text.strip().strip(" ∇") for heading in headings]
+    cols_to_check = first_column[:-1*len(extra_cols)] if extra_cols else first_column
+    
+    for col in cols_to_check:
         if col not in heading_text:
+            print("Table is not valid. Missing column: ", col)
             return None
        
     for row in rows:
@@ -86,9 +89,12 @@ for tag in tags:
         for table in tables:
             wb = Workbook()
             ws = wb.active
-            first_column = ["Sno", "Candidates", "Constituency", "Party", "Criminal case", "Education", "Total Assets", "Liabilities"]
+            first_column = ["Sno", "Candidate", "Constituency", "Party", "Criminal Case", "Education", "Total Assets", "Liabilities"]
             ws.append(first_column)
             file_name = generate_tables(table, year, ws, first_column)
+            if not file_name:
+                wb.close()
+                continue
             wb.save(file_name + ".xlsx")
             wb.close()
 
@@ -123,10 +129,13 @@ for tag in tags:
 
                         constituency_name = a_tag.text.strip()
                         href = a_tag.get("href")
+                        if "constituency_id" not in href or "https:" in href:
+                            continue
                         constituency_url = f"{candidate_url}/{href}"
+                        print("Constituency URL: ", constituency_url)
+
                         constituency_response = requests.get(constituency_url)
                         assert constituency_response.status_code == 200
-                        print("Constituency URL: ", constituency_url)
                         
                         constituency_soup = BeautifulSoup(constituency_response.content, "html.parser")
                         tables = constituency_soup.find_all("table")
