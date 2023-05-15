@@ -2,12 +2,21 @@ import requests
 from bs4 import BeautifulSoup
 from openpyxl import Workbook
 
-
 base_url = "https://myneta.info"
 
-def generate_tables(table, year, ws, first_column, is_winner=True):
+def generate_tables(table, year, ws, first_column, is_winner=True, extra_cols = []):
     """
-    Generate tables based on the data given
+    Generate tables based on the data given.
+    Args:
+        table: BeautifulSoup object of the table
+        year: Year of the election
+        ws: Worksheet object. This is required to save the data in the excel sheet
+        first_column: First column of the table. This is required to check if the table is valid or not. 
+            Also provides data on what the table should contain
+        is_winner: Boolean value to check if the table is for winners or not
+        extra_cols: Extra columns that are required to be added to the table. 
+            These extra cols are extra info that are not present in the scraped table.
+            THe extra cols should also be added to the first_column. Furthermore, those should always be present at the end of the table
     """
     
     rows = table.find_all("tr")
@@ -17,7 +26,7 @@ def generate_tables(table, year, ws, first_column, is_winner=True):
     is_by_election = False
 
     heading_text = [heading.text.strip() for heading in headings]
-    for col in first_column:
+    for col in first_column[:-1*len(extra_cols)]:
         if col not in heading_text:
             return None
        
@@ -31,7 +40,7 @@ def generate_tables(table, year, ws, first_column, is_winner=True):
         if "election" in candidate_col[2].lower() and "bye" in candidate_col[2].lower() and is_first_run:
             is_by_election = True
         is_first_run = False
-        ws.append(candidate_col)
+        ws.append(candidate_col + extra_cols)
 
     file_name = "Candidates_"
     if is_winner:
@@ -60,9 +69,9 @@ p_tags = soup.find_all("p")
 
 tags = a_tags + h_tags + p_tags
 for tag in tags:
-    # Filter all winners but not winners expenses
+    
     if "winners" in tag.text.lower() and "expense" not in tag.text.lower():
-        continue
+        # Filter all winners but not winners expenses
         href = tag.get("href")
         year = href.split("/")[1].strip("odisha").strip("orissa")
         
@@ -84,6 +93,7 @@ for tag in tags:
             wb.close()
 
     elif "all candidates" in tag.text.lower():
+        # Filter all candidates
         href = tag.get("href")
         year = href.split("/")[1].strip("odisha").strip("orissa")
 
@@ -95,12 +105,13 @@ for tag in tags:
 
         h3_tags = candidate_soup.find_all("h3")
         for h3_tag in h3_tags:
+            # Find all links for all constituencies.
             if "list of constituencies" in h3_tag.text.lower():
                 table = h3_tag.find_next("table")
                 rows = table.find_all("tr")
                 wb = Workbook()
                 ws = wb.active
-                first_column = ["Candidate","Party","Criminal Cases","Education","Age","Total Assets","Liabilities","Constituency"]
+                first_column = ["Candidate", "Party", "Criminal Cases", "Education", "Age", "Total Assets", "Liabilities", "Constituency"]
                 ws.append(first_column)
                 for row in rows:
                     cols = row.find_all("td")
@@ -111,8 +122,6 @@ for tag in tags:
                             continue
 
                         constituency_name = a_tag.text.strip()
-                        print("Constituency Name: ", constituency_name)
-                        break
                         href = a_tag.get("href")
                         constituency_url = f"{candidate_url}/{href}"
                         constituency_response = requests.get(constituency_url)
@@ -122,6 +131,9 @@ for tag in tags:
                         constituency_soup = BeautifulSoup(constituency_response.content, "html.parser")
                         tables = constituency_soup.find_all("table")
                         for table in tables:
-                            file_name = generate_tables(table, year, ws, first_column, is_winner=False)
+                            # Create table for each constituency
+                            file_name = generate_tables(table, year, ws, first_column, is_winner=False, extra_cols=[constituency_name])
+                
+                print("Done saving the excel with name: ", "All Candidates_" + year)
                 wb.save("All Candidates_" + year + ".xlsx")
                 wb.close()
